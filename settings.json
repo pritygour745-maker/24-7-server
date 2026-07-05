@@ -1,153 +1,114 @@
-const mineflayer = require('mineflayer');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const pvp = require('mineflayer-pvp').plugin;
-const fs = require('fs');
-
-// 1. Load the JSON configuration
-const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-
-// Fix syntax for hyphenated key 'bot-account'
-const bot = mineflayer.createBot({
-  host: 35493,
-  port: smpvir11.aternos.me,
-  username: config["bot-account"].username,
-  version: config.server.version
-});
-
-// 2. Load the essential brain plugins
-bot.loadPlugin(pathfinder);
-bot.loadPlugin(pvp);
-
-let mcData;
-let defaultMovements;
-
-bot.on('inject_allowed', () => {
-  mcData = require('minecraft-data')(bot.version);
-});
-
-bot.on('spawn', () => {
-  console.log(`${bot.username} has safely joined the game!`);
-  
-  // Set up pathfinder movements data
-  defaultMovements = new Movements(bot, mcData);
-  
-  // Apply real-player settings from config
-  if (config.movement["human-pathfinding"]?.enabled) {
-    defaultMovements.canDig = config.movement["human-pathfinding"]["allow-breaking"];
-    defaultMovements.allowParkour = config.movement["human-pathfinding"]["allow-parkour"];
-  }
-  bot.pathfinder.setMovements(defaultMovements);
-
-  // Handle Slash Authentication
-  if (config.utils['auto-auth'].enabled) {
-    bot.chat(`/register ${config.utils['auto-auth'].password} ${config.utils['auto-auth'].password}`);
-    bot.chat(`/login ${config.utils['auto-auth'].password}`);
-  }
-
-  // Start our main player loop
-  startPlayerLoop();
-});
-
-// --- CHAT SYSTEM ---
-bot.on('chat', (username, message) => {
-  if (username === bot.username) return; // Don't talk to itself
-  if (!config.chat.respond) return;
-
-  const msg = message.toLowerCase();
-
-  if (msg.includes('hello') || msg.includes('hi')) {
-    bot.chat(`Hey ${username}! Mind if I grind some resources here?`);
-  } else if (msg.includes('help')) {
-    bot.chat("I'm just gathering materials and clearing zombies.");
-  } else if (msg.includes('owner')) {
-    bot.chat("I belong to Tanvir.");
-  }
-});
-
-// --- REAL PLAYER CORE LOOP ---
-// The bot evaluates what to do every 1.5 seconds so it doesn't stutter
-function startPlayerLoop() {
-  setInterval(async () => {
-    // Priority 1: If an enemy is actively attacking or nearby, fight back!
-    if (config.modules.combat) {
-      const filter = e => e.type === 'hostile' && e.position.distanceTo(bot.entity.position) < 16;
-      const enemy = bot.nearestEntity(filter);
-      
-      if (enemy) {
-        // Equip best sword before fighting
-        equipBestWeapon();
-        bot.pvp.attack(enemy);
-        return; // Skip farming/mining while fighting
-      }
+{
+  "name": "Real Player Bot",
+  "bot-account": {
+    "username": "VIR_BOT",
+    "password": "",
+    "type": "offline"
+  },
+  "server": {
+    "ip": "smpvir11.aternos.me",
+    "port": 35493,
+    "version": "1.20.1",
+    "try-creative": false
+  },
+  "position": {
+    "enabled": true,
+    "x": 0,
+    "y": 100,
+    "z": 0
+  },
+  "utils": {
+    "auto-auth": {
+      "enabled": true,
+      "password": "SoloPlayz"
+    },
+    "anti-afk": {
+      "enabled": false,
+      "sneak": false
+    },
+    "chat-messages": {
+      "enabled": true,
+      "repeat": false,
+      "repeat-delay": 180,
+      "messages": [
+        "What's up everyone, just grinding out here!"
+      ]
+    },
+    "chat-log": true,
+    "auto-reconnect": true,
+    "auto-reconnect-delay": 2000,
+    "max-reconnect-delay": 120000
+  },
+  "movement": {
+    "enabled": true,
+    "circle-walk": {
+      "enabled": false,
+      "radius": 6,
+      "speed": 2500
+    },
+    "look-around": {
+      "enabled": true,
+      "interval": 4000
+    },
+    "random-jump": {
+      "enabled": false,
+      "interval": 7000
+    },
+    "human-pathfinding": {
+      "enabled": true,
+      "allow-parkour": true,
+      "allow-breaking": true
     }
-
-    // Stop fighting state if no enemies are near
-    if (bot.pvp.target) bot.pvp.stop();
-
-    // Priority 2: If auto-eat is on and bot is hungry, hold up and eat
-    if (config.combat["auto-eat"] && bot.food < 15) {
-      await bot.autoEat?.eat(); 
+  },
+  "modules": {
+    "avoidMobs": false,
+    "combat": true,
+    "beds": true,
+    "chat": true,
+    "console-commands": true,
+    "auto-farm": true,
+    "auto-mine": true
+  },
+  "combat": {
+    "attack-mobs": true,
+    "attack-players": false,
+    "auto-eat": true,
+    "retaliate": true,
+    "weapon-preference": ["diamond_sword", "iron_sword", "stone_sword", "wooden_sword"]
+  },
+  "auto-farm": {
+    "enabled": true,
+    "targets": ["oak_log", "birch_log", "spruce_log", "dark_oak_log"],
+    "tool-preference": "axe",
+    "search-radius": 16
+  },
+  "auto-mine": {
+    "enabled": true,
+    "targets": ["coal_ore", "iron_ore", "diamond_ore", "deepslate_diamond_ore"],
+    "tool-preference": "pickaxe",
+    "max-depth": 12
+  },
+  "beds": {
+    "pick-up-day": true,
+    "place-night": true
+  },
+  "discord": {
+    "enabled": false,
+    "webhookUrl": "",
+    "events": {
+      "connect": true,
+      "disconnect": true,
+      "chat": false
     }
-
-    // Priority 3: Cut wood (Auto-Farm module)
-    if (config.modules["auto-farm"] && config["auto-farm"]?.enabled) {
-      const targetLogs = config["auto-farm"].targets.map(name => mcData.blocksByName[name]?.id).filter(Boolean);
-      const woodBlock = bot.findBlock({ matching: targetLogs, maxDistance: config["auto-farm"]["search-radius"] || 16 });
-      
-      if (woodBlock) {
-        await breakBlockAction(woodBlock, config["auto-farm"]["tool-preference"]);
-        return;
-      }
-    }
-
-    // Priority 4: Mine Ores (Auto-Mine module)
-    if (config.modules["auto-mine"] && config["auto-mine"]?.enabled) {
-      const targetOres = config["auto-mine"].targets.map(name => mcData.blocksByName[name]?.id).filter(Boolean);
-      const oreBlock = bot.findBlock({ matching: targetOres, maxDistance: 12 });
-      
-      if (oreBlock) {
-        await breakBlockAction(oreBlock, config["auto-mine"]["tool-preference"]);
-        return;
-      }
-    }
-
-    // Priority 5: Look around naturally if completely idle
-    if (config.movement["look-around"]?.enabled && Math.random() < 0.3) {
-      const yaw = Math.random() * Math.PI * 2;
-      const pitch = (Math.random() - 0.5) * Math.PI / 4;
-      bot.look(yaw, pitch, false);
-    }
-
-  }, 1500);
-}
-
-// --- HELPER FUNCTION: PATHFIND TO BLOCK AND BREAK IT ---
-async function breakBlockAction(block, toolType) {
-  try {
-    // 1. Move to the block
-    const goal = new goals.GoalNear(block.position.x, block.position.y, block.position.z, 2);
-    await bot.pathfinder.goto(goal);
-    
-    // 2. Equip preferred tool if available
-    const tool = bot.inventory.items().find(item => item.name.includes(toolType));
-    if (tool) await bot.equip(tool, 'hand');
-
-    // 3. Look at it and dig it
-    await bot.lookAt(block.position);
-    await bot.dig(block);
-  } catch (err) {
-    // Ignore movement/digging cancellations to keep loop fluid
-  }
-}
-
-// --- HELPER FUNCTION: EQUIP BEST SWORD ---
-function equipBestWeapon() {
-  const preferences = config.combat["weapon-preference"] || ["diamond_sword", "iron_sword", "stone_sword", "wooden_sword"];
-  for (const weaponName of preferences) {
-    const weapon = bot.inventory.items().find(item => item.name === weaponName);
-    if (weapon) {
-      bot.equip(weapon, 'hand');
-      break;
+  },
+  "chat": {
+    "respond": true,
+    "ai-reply": true,
+    "mention-reply": true,
+    "smart-answers": {
+      "hello": "Hey there! Mind if I grind some resources here?",
+      "help": "I'm just gathering materials and clearing zombies.",
+      "owner": "I belong to Tanvir."
     }
   }
 }

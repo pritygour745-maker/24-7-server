@@ -1,13 +1,13 @@
 {
   "name": "Real Player Bot",
   "bot-account": {
-    "username": "VIR_BOT",
+    "username": "BOT",
     "password": "",
     "type": "offline"
   },
   "server": {
-    "ip": "mcfleet21.aternos.me",
-    "port": 37513,
+    "ip": "arynvir24.aternos.me",
+    "port": 48035,
     "version": "1.20.1",
     "try-creative": false
   },
